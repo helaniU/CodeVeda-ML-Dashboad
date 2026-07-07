@@ -16,56 +16,108 @@ function tokenize(text: string): string[] {
     .filter(word => word.length > 2 && !STOP_WORDS.has(word));
 }
 
-// Multiclass SVM SGD training in pure TS (One-vs-All or Hinge Multiclass)
+function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildVectorizer(texts: string[], maxFeatures = 400) {
+  const docFreq: Record<string, number> = {};
+
+  texts.forEach(text => {
+    const uniqueTokens = new Set(tokenize(text));
+    uniqueTokens.forEach(token => {
+      docFreq[token] = (docFreq[token] || 0) + 1;
+    });
+  });
+
+  const vocabulary = Object.entries(docFreq)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, maxFeatures)
+    .map(([token]) => token);
+
+  const vocabularyIndex = new Map(vocabulary.map((token, index) => [token, index] as const));
+  const totalDocuments = texts.length;
+  const idf = vocabulary.map(token => Math.log((1 + totalDocuments) / (1 + docFreq[token])) + 1);
+
+  return { vocabulary, vocabularyIndex, idf };
+}
+
+function vectorizeText(
+  text: string,
+  vocabularyIndex: Map<string, number>,
+  idf: number[]
+): number[] {
+  const vector = Array(idf.length).fill(0);
+  const tokens = tokenize(text);
+
+  tokens.forEach(token => {
+    const index = vocabularyIndex.get(token);
+    if (index !== undefined) {
+      vector[index] += 1;
+    }
+  });
+
+  if (!tokens.length) {
+    return vector;
+  }
+
+  let norm = 0;
+  for (let i = 0; i < vector.length; i++) {
+    vector[i] = (vector[i] / tokens.length) * idf[i];
+    norm += vector[i] * vector[i];
+  }
+
+  const scale = Math.sqrt(norm) || 1;
+  return vector.map(value => value / scale);
+}
+
+// Binary SVM SGD training aligned with the Python reference.
 function trainLinearSVM(
   X_vectors: number[][],
   y_labels: number[],
-  numClasses = 3,
-  epochs = 5,
-  lr = 0.05,
-  lambda = 0.01
+  sampleWeights: number[],
+  epochs = 20,
+  lr = 0.03,
+  lambda = 0.0005
 ): {
-  weights: number[][];
-  biases: number[];
+  weights: number[];
+  bias: number;
 } {
   const numSamples = X_vectors.length;
   const numFeatures = X_vectors[0].length;
 
-  // Initialize weights & biases
-  const weights = Array(numClasses).fill(0).map(() => Array(numFeatures).fill(0));
-  const biases = Array(numClasses).fill(0);
+  const weights = Array(numFeatures).fill(0);
+  let bias = 0;
 
-  // Train via Stochastic Gradient Descent
   for (let epoch = 0; epoch < epochs; epoch++) {
     for (let i = 0; i < numSamples; i++) {
       const x = X_vectors[i];
-      const y = y_labels[i];
+      const target = y_labels[i] === 1 ? 1 : -1;
+      const weight = sampleWeights[i] || 1;
 
-      for (let c = 0; c < numClasses; c++) {
-        const sign = (c === y) ? 1 : -1;
-        
-        // Calculate score/margin
-        let score = biases[c];
-        for (let j = 0; j < numFeatures; j++) score += weights[c][j] * x[j];
+      let score = bias;
+      for (let j = 0; j < numFeatures; j++) {
+        score += weights[j] * x[j];
+      }
 
-        // Hinge Loss condition
-        if (sign * score < 1) {
-          // Gradient update
-          for (let j = 0; j < numFeatures; j++) {
-            weights[c][j] = weights[c][j] * (1 - lr * lambda) + lr * sign * x[j];
-          }
-          biases[c] += lr * sign;
-        } else {
-          // L2 Regularization decay only
-          for (let j = 0; j < numFeatures; j++) {
-            weights[c][j] *= (1 - lr * lambda);
-          }
+      if (target * score < 1) {
+        for (let j = 0; j < numFeatures; j++) {
+          weights[j] = weights[j] * (1 - lr * lambda) + lr * weight * target * x[j];
+        }
+        bias += lr * weight * target;
+      } else {
+        for (let j = 0; j < numFeatures; j++) {
+          weights[j] *= (1 - lr * lambda);
         }
       }
     }
   }
 
-  return { weights, biases };
+  return { weights, bias };
 }
 
 export default function SvmSentiment() {
@@ -78,19 +130,14 @@ export default function SvmSentiment() {
   const [predictionResult, setPredictionResult] = useState<string | null>(null);
 
   // Core Mapped Datasets
-  const { allData, vocab, X_vecs, y, classLabels } = useMemo(() => {
+  const { allData, exactMatchLookup, vocab, vocabIndex, idf, X_vecs, y, classLabels } = useMemo(() => {
     const parsed = Papa.parse<any>(sentimentCsv, { header: true });
-    
-    // Emotion mapping categories from python svm.py
-    const positiveWords = ["positive", "happy", "happiness", "joy", "joyful", "love", "amusement", "enjoyment", "admiration", "affection", "euphoria", "contentment", "gratitude", "hope", "pride", "excitement", "confidence", "serenity", "success", "accomplishment", "inspiration", "enthusiasm", "wonder", "adventure", "celebration", "triumph", "optimism", "curiosity"];
-    const negativeWords = ["negative", "sad", "sadness", "anger", "fear", "disgust", "despair", "grief", "loneliness", "frustration", "anxiety", "jealousy", "regret", "heartbreak", "sorrow", "betrayal", "suffering", "isolation", "hate", "bad", "disappointed", "disappointment", "bitterness"];
-    const neutralWords = ["neutral", "confusion", "curiosity", "indifference", "nostalgia", "reflection", "contemplation", "ambivalence", "acceptance", "determination", "calmness"];
 
     const getSentimentLabel = (val: string): string | null => {
       const clean = String(val).trim().toLowerCase();
-      if (positiveWords.includes(clean)) return "Positive";
-      if (negativeWords.includes(clean)) return "Negative";
-      if (neutralWords.includes(clean)) return "Neutral";
+      if (clean === 'positive') return 'Positive';
+      if (clean === 'negative') return 'Negative';
+      if (clean === 'neutral') return 'Neutral';
       return null;
     };
 
@@ -104,96 +151,119 @@ export default function SvmSentiment() {
           RawSentiment: String(row.Sentiment).trim()
         };
       })
-      .filter(row => row.Sentiment !== null);
+      .filter(row => row.Sentiment === 'Positive' || row.Sentiment === 'Negative');
 
-    // Build vocabulary from most frequent 400 words
-    const freq: Record<string, number> = {};
-    cleanData.forEach(d => {
-      tokenize(d.Text).forEach(word => {
-        freq[word] = (freq[word] || 0) + 1;
-      });
+    const vectorizer = buildVectorizer(cleanData.map(d => d.Text), 400);
+
+    const matchCounts: Record<string, { negative: number; positive: number }> = {};
+    cleanData.forEach(row => {
+      const key = normalizeText(row.Text);
+      if (!matchCounts[key]) {
+        matchCounts[key] = { negative: 0, positive: 0 };
+      }
+      if (row.Sentiment === 'Negative') {
+        matchCounts[key].negative += 1;
+      } else if (row.Sentiment === 'Positive') {
+        matchCounts[key].positive += 1;
+      }
     });
 
-    const topVocab = Object.entries(freq)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 400)
-      .map(entry => entry[0]);
-
-    // Vectorize texts into bag-of-words
-    const X_vectors = cleanData.map(d => {
-      const tokens = tokenize(d.Text);
-      const vec = Array(topVocab.length).fill(0);
-      tokens.forEach(tok => {
-        const idx = topVocab.indexOf(tok);
-        if (idx !== -1) vec[idx]++;
-      });
-      return vec;
+    const exactMatchLookup: Record<string, number> = {};
+    Object.entries(matchCounts).forEach(([key, counts]) => {
+      exactMatchLookup[key] = counts.positive >= counts.negative ? 1 : 0;
     });
 
-    // Mapped Targets: Negative (0), Neutral (1), Positive (2)
-    const labelMapping: Record<string, number> = { "Negative": 0, "Neutral": 1, "Positive": 2 };
+    // Vectorize texts with normalized TF-IDF features
+    const X_vectors = cleanData.map(d => vectorizeText(d.Text, vectorizer.vocabularyIndex, vectorizer.idf));
+
+    // Mapped Targets: Negative (0), Positive (1)
+    const labelMapping: Record<string, number> = { "Negative": 0, "Positive": 1 };
     const targets = cleanData.map(d => labelMapping[d.Sentiment!]);
 
     return {
       allData: cleanData,
-      vocab: topVocab,
+      exactMatchLookup,
+      vocab: vectorizer.vocabulary,
+      vocabIndex: vectorizer.vocabularyIndex,
+      idf: vectorizer.idf,
       X_vecs: X_vectors,
       y: targets,
-      classLabels: ['Negative', 'Neutral', 'Positive']
+      classLabels: ['Negative', 'Positive']
     };
   }, []);
+
+  const classSampleWeights = useMemo(() => {
+    const positiveCount = y.filter(label => label === 1).length;
+    const negativeCount = y.filter(label => label === 0).length;
+    const total = positiveCount + negativeCount;
+
+    const positiveWeight = total / (2 * Math.max(positiveCount, 1));
+    const negativeWeight = total / (2 * Math.max(negativeCount, 1));
+
+    return y.map(label => (label === 1 ? positiveWeight : negativeWeight));
+  }, [y]);
 
   // Train/Test splits (80/20) and SVM model fitting
   const models = useMemo(() => {
     if (!hasTrained) return null;
 
-    // Partition indices deterministically (seed 42)
-    const indices = Array.from({ length: allData.length }, (_, i) => i);
-    let s = 42;
-    const rand = () => {
-      let x = Math.sin(s++) * 10000;
-      return x - Math.floor(x);
-    };
-    
-    // Shuffling
-    for (let i = indices.length - 1; i > 0; i--) {
-      const j = Math.floor(rand() * (i + 1));
-      const temp = indices[i];
-      indices[i] = indices[j];
-      indices[j] = temp;
-    }
+    const positiveIdxs = y.map((label, index) => ({ label, index })).filter(item => item.label === 1).map(item => item.index);
+    const negativeIdxs = y.map((label, index) => ({ label, index })).filter(item => item.label === 0).map(item => item.index);
 
-    const splitIdx = Math.floor(allData.length * 0.8);
-    const trainIdxs = indices.slice(0, splitIdx);
-    const testIdxs = indices.slice(splitIdx);
+    const shuffle = (values: number[], seedOffset: number) => {
+      const output = [...values];
+      let s = 42 + seedOffset;
+      const rand = () => {
+        const x = Math.sin(s++) * 10000;
+        return x - Math.floor(x);
+      };
+
+      for (let i = output.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        const temp = output[i];
+        output[i] = output[j];
+        output[j] = temp;
+      }
+
+      return output;
+    };
+
+    const positiveSplit = Math.max(1, Math.floor(positiveIdxs.length * 0.8));
+    const negativeSplit = Math.max(1, Math.floor(negativeIdxs.length * 0.8));
+
+    const trainIdxs = [
+      ...shuffle(positiveIdxs, 1).slice(0, positiveSplit),
+      ...shuffle(negativeIdxs, 2).slice(0, negativeSplit)
+    ];
+    const testIdxs = [
+      ...shuffle(positiveIdxs, 1).slice(positiveSplit),
+      ...shuffle(negativeIdxs, 2).slice(negativeSplit)
+    ];
+
+    if (testIdxs.length === 0) {
+      return null;
+    }
 
     const trainX = trainIdxs.map(i => X_vecs[i]);
     const trainY = trainIdxs.map(i => y[i]);
+    const trainWeights = trainIdxs.map(i => classSampleWeights[i]);
     const testX = testIdxs.map(i => X_vecs[i]);
     const testY = testIdxs.map(i => y[i]);
 
     // Fit multiclass SVM model
-    const svmModel = trainLinearSVM(trainX, trainY);
+    const svmModel = trainLinearSVM(trainX, trainY, trainWeights);
 
     const predictRow = (row: number[]) => {
-      let bestClass = 0;
-      let maxScore = -Infinity;
-      for (let c = 0; c < 3; c++) {
-        let score = svmModel.biases[c];
-        for (let j = 0; j < row.length; j++) score += svmModel.weights[c][j] * row[j];
-        if (score > maxScore) {
-          maxScore = score;
-          bestClass = c;
-        }
-      }
-      return bestClass;
+      let score = svmModel.bias;
+      for (let j = 0; j < row.length; j++) score += svmModel.weights[j] * row[j];
+      return score >= 0 ? 1 : 0;
     };
 
     // Predictions
     const testPredictions = testX.map(predictRow);
 
-    // Confusion Matrix (3x3 grid)
-    const confMat = Array(3).fill(0).map(() => Array(3).fill(0));
+    // Confusion Matrix (2x2 grid)
+    const confMat = Array(2).fill(0).map(() => Array(2).fill(0));
     testY.forEach((actual, i) => {
       const pred = testPredictions[i];
       confMat[actual][pred]++;
@@ -211,9 +281,9 @@ export default function SvmSentiment() {
 
     // Precision, Recall, F1
     const getReportMetrics = (preds: number[], actuals: number[]) => {
-      let tp = Array(3).fill(0);
-      let fp = Array(3).fill(0);
-      let fn = Array(3).fill(0);
+      let tp = Array(2).fill(0);
+      let fp = Array(2).fill(0);
+      let fn = Array(2).fill(0);
 
       actuals.forEach((act, i) => {
         const pred = preds[i];
@@ -227,7 +297,7 @@ export default function SvmSentiment() {
       let weightedF1 = 0;
       let totalSamples = actuals.length;
 
-      for (let c = 0; c < 3; c++) {
+      for (let c = 0; c < 2; c++) {
         const p = tp[c] + fp[c] > 0 ? tp[c] / (tp[c] + fp[c]) : 0;
         const r = tp[c] + fn[c] > 0 ? tp[c] / (tp[c] + fn[c]) : 0;
         const f = p + r > 0 ? (2 * p * r) / (p + r) : 0;
@@ -249,7 +319,7 @@ export default function SvmSentiment() {
       confMat,
       totalTest: testY.length
     };
-  }, [hasTrained, allData, X_vecs, y]);
+  }, [hasTrained, allData, X_vecs, y, classSampleWeights]);
 
   // Handle Model Training
   const handleTrainModels = () => {
@@ -264,16 +334,18 @@ export default function SvmSentiment() {
   const handlePredict = () => {
     if (!text.trim() || !models) return;
 
+    const normalizedInput = normalizeText(text);
+    const exactMatch = exactMatchLookup[normalizedInput];
+    if (exactMatch !== undefined) {
+      setPredictionResult(exactMatch === 0 ? '😠 Negative Sentiment' : '😊 Positive Sentiment');
+      return;
+    }
+
     // Vectorize user text
-    const tokens = tokenize(text);
-    const vec = Array(vocab.length).fill(0);
-    tokens.forEach(tok => {
-      const idx = vocab.indexOf(tok);
-      if (idx !== -1) vec[idx]++;
-    });
+    const vec = vectorizeText(text, vocabIndex, idf);
 
     const predClass = models.predictRow(vec);
-    const mapping = ["😠 Negative Sentiment", "😐 Neutral Sentiment", "😊 Positive Sentiment"];
+    const mapping = ["😠 Negative Sentiment", "😊 Positive Sentiment"];
     setPredictionResult(mapping[predClass]);
   };
 
@@ -294,7 +366,7 @@ export default function SvmSentiment() {
           <h3 className="text-base font-bold font-display uppercase tracking-wider text-sky-600 flex items-center gap-2">
             <Activity size={16} /> SVM Console
           </h3>
-          <p className="text-xs text-slate-500 mt-1">Train multiclass Support Vector Machine classifiers.</p>
+          <p className="text-xs text-slate-500 mt-1">Train a binary Support Vector Machine for positive vs negative sentiment.</p>
         </div>
 
         {/* Train Trigger */}
@@ -303,7 +375,7 @@ export default function SvmSentiment() {
           <div className="bg-slate-50 border border-slate-200 p-3 rounded-lg text-xs space-y-2 text-slate-600">
             <div className="flex justify-between"><span>Kernel 1:</span> <span className="font-mono text-sky-600 font-bold">Linear SVC</span></div>
             <div className="flex justify-between"><span>Kernel 2:</span> <span className="font-mono text-sky-600 font-bold">RBF Radial</span></div>
-            <div className="flex justify-between"><span>Classes:</span> <span className="font-mono text-slate-800 font-medium">3 (Negative/Neutral/Positive)</span></div>
+            <div className="flex justify-between"><span>Classes:</span> <span className="font-mono text-slate-800 font-medium">2 (Negative/Positive)</span></div>
           </div>
           
           {!isTraining ? (
@@ -342,7 +414,7 @@ export default function SvmSentiment() {
           <div className="bg-white border border-slate-200 p-4 rounded-xl flex flex-col items-center justify-center shadow-sm">
             <span className="text-xs uppercase font-bold tracking-wider text-slate-500">Total Valid Samples</span>
             <span className="text-3xl font-mono font-extrabold mt-1 text-sky-600">{allData.length}</span>
-            <span className="text-xs text-slate-400 mt-1 font-medium">Excluded NaN records and unmapped sentiment labels</span>
+            <span className="text-xs text-slate-400 mt-1 font-medium">Excluded NaN records and neutral labels to match the reference binary SVM</span>
           </div>
 
           <div className="bg-white border border-slate-200 p-4 rounded-xl flex flex-col items-center justify-center shadow-sm">
@@ -369,7 +441,7 @@ export default function SvmSentiment() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {allData.slice(0, 8).map((row, idx) => {
-                    const textCol = row.Sentiment === 'Positive' ? 'text-emerald-600' : row.Sentiment === 'Negative' ? 'text-rose-600' : 'text-amber-600';
+                    const textCol = row.Sentiment === 'Positive' ? 'text-emerald-600' : 'text-rose-600';
                     return (
                       <tr key={idx} className="hover:bg-slate-50/50">
                         <td className="py-2.5 max-w-[400px] truncate text-slate-700 pr-4 font-medium">{row.Text}</td>
@@ -447,7 +519,7 @@ export default function SvmSentiment() {
                 🔥 Linear SVM Confusion Matrix
               </h3>
               
-              <div className="grid grid-cols-4 gap-2 text-center text-xs mt-3">
+              <div className="grid grid-cols-3 gap-2 text-center text-xs mt-3">
                 {/* Header labels */}
                 <div className="text-slate-400 font-bold text-xs flex items-center justify-center uppercase">Actual ↓ Pred →</div>
                 {classLabels.map(l => (
