@@ -9,6 +9,9 @@ ml_env/
 venv/
 .venv/
 
+# Node
+node_modules/
+
 # Build / distribution
 build/
 dist/
