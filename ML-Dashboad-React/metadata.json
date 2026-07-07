@@ -1,0 +1,6 @@
+{
+  "name": "CodeVeda ML Dashboard",
+  "description": "An interactive machine learning playground displaying Decision Trees, KMeans & DBSCAN, Neural Networks, Random Forest Regression, and SVM Sentiment Analysis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
