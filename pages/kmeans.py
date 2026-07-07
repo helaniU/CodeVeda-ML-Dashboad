@@ -16,7 +16,67 @@ FIGSIZE = (4.5, 3)
 # =========================
 st.set_page_config(page_title="Clustering Dashboard", layout="wide")
 
-st.title("🟡 K-Means vs DBSCAN - Clustering Analysis Tool")
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+    --bg: #0b0f14;
+    --panel: #11161d;
+    --border: #232830;
+    --yellow: #F4C430;
+    --yellow-soft: #FFD86B;
+    --text: #e6edf3;
+    --muted: #8b98a9;
+}
+
+.stApp {
+    background: var(--bg);
+    color: var(--text);
+}
+
+html, body, [class*="css"] {
+    font-family: 'Manrope', sans-serif;
+}
+
+.app-banner {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--yellow);
+    border-radius: 10px;
+    padding: 10px 20px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.app-banner h1 {
+    margin: 0 !important;
+    font-size: 38px !important;
+    color: var(--yellow) !important;
+    font-weight: 700 !important;
+    border-bottom: 2px solid var(--yellow);
+    padding-bottom: 12px;
+}
+
+.app-banner span.tag {
+    color: var(--yellow);
+    font-size: 13px;
+    font-family: 'JetBrains Mono', monospace;
+    border: 1px solid var(--yellow);
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: rgba(244, 196, 48, 0.08);
+}
+</style>
+
+
+<div class="app-banner">
+    <h1>🌼 K-Means vs DBSCAN Clustering Analysis</h1>
+    <span class="tag">IRIS DATASET</span>
+</div>
+""", unsafe_allow_html=True)
 
 # =========================
 # LOAD DATA
@@ -76,7 +136,7 @@ if algo == "KMeans":
 
     with col2:
         fig2, ax2 = plt.subplots(figsize=(5, 3))
-        ax2.plot(ks, sil_scores, marker='o', color='green')
+        ax2.plot(ks, sil_scores, marker='o', color='#F4C430')
         ax2.set_title("Silhouette Score vs K")
         ax2.set_xlabel("K")
         ax2.set_ylabel("Score")

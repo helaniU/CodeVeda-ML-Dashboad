@@ -7,203 +7,226 @@ from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 
-st.set_page_config(page_title="ML Dashboard", layout="wide", page_icon="🌿")
+st.set_page_config(page_title="Forest Console | Decision Tree", layout="wide", page_icon="🌲")
 
 # =========================
 # 🎨 DARK THEME — SLATE + SUBTLE GREEN ACCENTS (UI ONLY)
 # =========================
 st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-    html, body, [class*="css"] {
-        font-family: 'Poppins', sans-serif;
-    }
+<style>
+:root {
+    --bg: #0b0f14;
+    --panel: #11161d;
+    --panel-2: #151b23;
+    --border: #232b36;
+    --emerald: #22c55e;
+    --emerald-soft: #86efac;
+    --text: #e6edf3;
+    --muted: #8b98a9;
+}
 
-    .stApp {
-        background: #12151a;
-        background-image: radial-gradient(circle at 15% 0%, rgba(45, 212, 149, 0.06), transparent 40%),
-                           radial-gradient(circle at 85% 100%, rgba(45, 212, 149, 0.05), transparent 40%);
-        color: #d7dbe0;
-    }
+html, body, .stApp {
+    background-color: var(--bg) !important;
+    font-family: 'Manrope', sans-serif !important;
+    color: var(--text) !important;
+}
 
-    section[data-testid="stSidebar"] {
-        background: #171b21;
-        border-right: 1px solid #232830;
-    }
-    section[data-testid="stSidebar"] * {
-        color: #cfd6dd !important;
-    }
-    section[data-testid="stSidebar"] h2, section[data-testid="stSidebar"] h3 {
-        color: #2dd495 !important;
-    }
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
 
-    .app-banner {
-        background: #171b21;
-        border: 1px solid #232830;
-        border-left: 4px solid #2dd495;
-        border-radius: 10px;
-        padding: 18px 24px;
-        margin-bottom: 24px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-    .app-banner h1 {
-        margin: 0 !important;
-        font-size: 26px !important;
-        color: #f1f3f5 !important;
-        font-weight: 700 !important;
-    }
-    .app-banner span.tag {
-        color: #2dd495;
-        font-size: 13px;
-        font-family: 'JetBrains Mono', monospace;
-        border: 1px solid #2dd495;
-        padding: 4px 10px;
-        border-radius: 20px;
-    }
+h1 {
+    font-family: 'Manrope', sans-serif !important;
+    font-weight: 800 !important;
+    color: var(--text) !important;
+    font-size: 2.3rem !important;
+    border-bottom: 2px solid var(--emerald);
+    padding-bottom: 14px;
+    margin-bottom: 4px !important;
+}
+h2, h3 {
+    font-family: 'Manrope', sans-serif !important;
+    font-weight: 700 !important;
+    color: var(--emerald-soft) !important;
+}
+h3 {
+    font-size: 1.15rem !important;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px !important;
+}
 
-    h2, h3, h4 {
-        color: #e7e9ec !important;
-        font-weight: 600 !important;
-    }
+p, span, label, div, li {
+    color: var(--text);
+}
+.stCaption, .muted {
+    color: var(--muted) !important;
+}
 
-    div[data-testid="column"] > div {
-        background: #171b21;
-        border: 1px solid #232830;
-        border-radius: 12px;
-        padding: 20px;
-    }
-    div[data-testid="column"] {
-        padding: 6px;
-    }
+section[data-testid="stSidebar"] {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+}
+section[data-testid="stSidebar"] * {
+    color: var(--text) !important;
+}
+section[data-testid="stSidebar"] h2, section[data-testid="stSidebar"] h3 {
+    color: var(--emerald-soft) !important;
+}
 
-    .metric-card {
-        background: linear-gradient(135deg, #17332a, #171b21);
-        border: 1px solid #2dd495;
-        border-radius: 12px;
-        padding: 16px 20px;
-        text-align: center;
-        margin-top: 8px;
-    }
-    .metric-card .label {
-        font-size: 13px;
-        color: #9fb0a8;
-        letter-spacing: 0.5px;
-        text-transform: uppercase;
-    }
-    .metric-card .value {
-        font-size: 34px;
-        font-weight: 700;
-        color: #2dd495;
-        font-family: 'JetBrains Mono', monospace;
-    }
+.app-banner {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--emerald);
+    border-radius: 10px;
+    padding: 10px 20px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.app-banner h1 {
+    margin: 0 !important;
+    font-size: 38px !important;
+    color: #f1f3f5 !important;
+    font-weight: 700 !important;
+}
+.app-banner span.tag {
+    color: var(--emerald);
+    font-size: 13px;
+    font-family: 'JetBrains Mono', monospace;
+    border: 1px solid var(--emerald);
+    padding: 4px 10px;
+    border-radius: 20px;
+}
 
-    .predict-card {
-        background: #171b21;
-        border: 1px solid #232830;
-        border-left: 4px solid #2dd495;
-        border-radius: 10px;
-        padding: 18px 22px;
-        margin-bottom: 10px;
-    }
-    .predict-card .predict-label {
-        font-size: 13px;
-        color: #9fb0a8;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    .predict-card .predict-value {
-        font-size: 24px;
-        font-weight: 700;
-        color: #2dd495;
-        text-transform: capitalize;
-    }
+div[data-testid="column"] > div {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+}
+div[data-testid="column"] {
+    padding: 6px;
+}
 
-    .conf-row {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin: 6px 0;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 13px;
-    }
-    .conf-name {
-        width: 90px;
-        color: #cfd6dd;
-        text-transform: capitalize;
-    }
-    .conf-bar-bg {
-        flex: 1;
-        background: #232830;
-        border-radius: 6px;
-        overflow: hidden;
-        height: 10px;
-    }
-    .conf-bar-fill {
-        background: linear-gradient(90deg, #1a7a55, #2dd495);
-        height: 100%;
-        border-radius: 6px;
-    }
-    .conf-pct {
-        width: 46px;
-        text-align: right;
-        color: #2dd495;
-    }
+.metric-card {
+    background: linear-gradient(135deg, #17332a, var(--panel));
+    border: 1px solid var(--emerald);
+    border-radius: 12px;
+    padding: 16px 20px;
+    text-align: center;
+    margin-top: 8px;
+}
+.metric-card .label {
+    font-size: 13px;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+.metric-card .value {
+    font-size: 34px;
+    font-weight: 700;
+    color: var(--emerald);
+    font-family: 'JetBrains Mono', monospace;
+}
 
-    div[data-testid="stAlertContainer"] {
-        background: #17332a !important;
-        color: #d7f7e6 !important;
-        border-radius: 10px !important;
-        border: 1px solid #2dd495 !important;
-    }
+.predict-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--emerald);
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin-bottom: 10px;
+}
+.predict-card .predict-label {
+    font-size: 13px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.predict-card .predict-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--emerald);
+    text-transform: capitalize;
+}
 
-    div[data-testid="stDataFrame"] {
-        border: 1px solid #232830;
-        border-radius: 10px;
-        overflow: hidden;
-    }
+.conf-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 6px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+}
+.conf-name {
+    width: 90px;
+    color: #cfd6dd;
+    text-transform: capitalize;
+}
+.conf-bar-bg {
+    flex: 1;
+    background: var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    height: 10px;
+}
+.conf-bar-fill {
+    background: linear-gradient(90deg, #1a7a55, var(--emerald));
+    height: 100%;
+    border-radius: 6px;
+}
+.conf-pct {
+    width: 46px;
+    text-align: right;
+    color: var(--emerald);
+}
 
-    pre, code, .stText, div[data-testid="stText"] {
-        background-color: #10141a !important;
-        color: #b7c2ba !important;
-        border-radius: 8px !important;
-        border: 1px solid #232830 !important;
-        padding: 12px !important;
-        font-family: 'JetBrains Mono', monospace !important;
-    }
+div[data-testid="stAlertContainer"] {
+    background: #17332a !important;
+    color: #d7f7e6 !important;
+    border-radius: 10px !important;
+    border: 1px solid var(--emerald) !important;
+}
 
-    div[data-testid="stSlider"] > div > div > div > div {
-        background-color: #2dd495 !important;
-    }
-    .stSlider [role="slider"] {
-        background-color: #2dd495 !important;
-        box-shadow: 0 0 6px rgba(45, 212, 149, 0.6) !important;
-    }
+div[data-testid="stDataFrame"] {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+}
 
-    div[data-baseweb="select"] > div {
-        background-color: #171b21 !important;
-        border-radius: 8px !important;
-        border: 1px solid #232830 !important;
-        color: #d7dbe0 !important;
-    }
+pre, code, .stText, div[data-testid="stText"] {
+    background-color: #10141a !important;
+    color: #b7c2ba !important;
+    border-radius: 8px !important;
+    border: 1px solid var(--border) !important;
+    padding: 12px !important;
+    font-family: 'JetBrains Mono', monospace !important;
+}
 
-    .section-title {
-        font-size: 15px;
-        font-weight: 600;
-        color: #9fb0a8;
-        text-transform: uppercase;
-        letter-spacing: 0.6px;
-        margin-bottom: 10px;
-        border-bottom: 1px solid #232830;
-        padding-bottom: 8px;
-    }
+div[data-testid="stSlider"] > div > div > div > div {
+    background-color: var(--emerald) !important;
+}
+.stSlider [role="slider"] {
+    background-color: var(--emerald) !important;
+    box-shadow: 0 0 6px rgba(34, 197, 94, 0.6) !important;
+}
 
-    ::-webkit-scrollbar { width: 8px; }
-    ::-webkit-scrollbar-track { background: #12151a; }
-    ::-webkit-scrollbar-thumb { background: #2a3038; border-radius: 8px; }
-    </style>
+div[data-baseweb="select"] > div {
+    background-color: var(--panel) !important;
+    border-radius: 8px !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text) !important;
+}
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: #2a3038; border-radius: 8px; }
+</style>
 """, unsafe_allow_html=True)
 
 st.markdown("""<div class="app-banner"><h1>🌳 Decision Tree ML Dashboard</h1><span class="tag">IRIS DATASET</span></div>""", unsafe_allow_html=True)
@@ -307,8 +330,8 @@ st.markdown(conf_html, unsafe_allow_html=True)
 st.subheader("🌳 Decision Tree Visualization")
 
 fig, ax = plt.subplots(figsize=(12, 6))
-fig.patch.set_facecolor('#12151a')
-ax.set_facecolor('#12151a')
+fig.patch.set_facecolor('#0b0f14')
+ax.set_facecolor('#0b0f14')
 plot_tree(
     model,
     feature_names=iris.feature_names,

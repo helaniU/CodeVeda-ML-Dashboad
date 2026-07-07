@@ -174,6 +174,32 @@ hr { border-color: var(--border) !important; }
     font-family: 'JetBrains Mono', monospace;
 }
 .badge b { color: var(--emerald-soft); }
+
+.app-banner {
+    background: #171b21;
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--emerald);
+    border-radius: 10px;
+    padding: 10px 20px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.app-banner h1 {
+    margin: 0 !important;
+    font-size: 38px !important;
+    color: #f1f3f5 !important;
+    font-weight: 700 !important;
+}
+.app-banner span.tag {
+    color: var(--emerald);
+    font-size: 13px;
+    font-family: 'JetBrains Mono', monospace;
+    border: 1px solid var(--emerald);
+    padding: 4px 10px;
+    border-radius: 20px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -206,15 +232,12 @@ def chart(fig):
 # -------------------------
 # TITLE
 # -------------------------
-st.title("🌲 Random Forest Regression Console")
 st.markdown("""
-<div class="badge-row">
-    <span class="badge">MODEL <b>RandomForestRegressor</b></span>
-    <span class="badge">TASK <b>House Price Prediction</b></span>
-    <span class="badge">DATA <b>Boston-style Housing Set</b></span>
+<div class="app-banner">
+    <h1>🌲 Random Forest Regression Dashboard</h1>
+    <span class="tag">HOUSE PRICE DATASET</span>
 </div>
 """, unsafe_allow_html=True)
-
 # -------------------------
 # LOAD DATA
 # -------------------------
